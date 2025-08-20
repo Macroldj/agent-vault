@@ -1,0 +1,43 @@
+@Library('company-ci@v1') _
+
+pipeline {
+  agent any
+  options {
+    timestamps()
+    ansiColor('xterm')
+    disableConcurrentBuilds()
+    buildDiscarder(logRotator(numToKeepStr: '50'))
+  }
+  stages {
+    stage('Run Shared Library Pipeline') {
+      steps {
+        script {
+          ciPipeline(
+            language: 'go',
+            projectDir: 'apps/svc-go',
+            docker: [
+              registry: 'ghcr.io/${env.GITHUB_REPOSITORY ?: "org/repo"}',
+              image: 'svc-go',
+              context: '.',
+              file: 'apps/svc-go/Dockerfile',
+              push: true,
+              extraTags: ["${env.BUILD_NUMBER}", "${env.GIT_COMMIT?.take(7)}"]
+            ],
+            helm: [
+              release: 'svc-go',
+              chart: 'charts/svc-go',
+              namespace: 'dev',
+              timeout: '5m',
+              valuesFile: 'charts/svc-go/values-dev.yaml'
+            ],
+            gates: [
+              coverage: 80,
+              lint: true,
+              security: true
+            ]
+          )
+        }
+      }
+    }
+  }
+}
